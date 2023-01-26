@@ -1,0 +1,394 @@
+package com.masai.Service;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import com.masai.Repository.*;
+import com.masai.exception.*;
+import com.masai.model.*;
+
+@Service
+public class ItemOrderServiceImpl implements ItemOrderService{
+	
+	@Autowired
+	private ItemOrderRepo iRepo;
+	
+	@Autowired
+	private PlanterRepo pRepo;
+	
+	@Autowired
+	private PlantDao pDao;
+	
+	@Autowired
+	private SeedRepo sRepo;
+	
+	@Autowired
+	private CustomerSessionRepo cSessionRepo;
+	
+//	private ItemOrderRepo 
+
+	@Override
+	public List<Planter> findSeedWithPlanter(String seed, String key) throws OrderException, CustomerException, PlanterNotFoundException {
+
+		 CustomerCurrentUserSession session = cSessionRepo.findByCustomerUuid(key);
+		 
+		 if(session!=null) {
+			 
+			 List<Planter> planters = pRepo.getPlanterBySeed(seed);
+			 
+			 if(planters.size()==0) {
+				 
+				 throw new PlanterNotFoundException(seed+"seed is not available");
+			 }else
+				 
+				 return planters;
+		 }else
+			 
+			 throw new CustomerException("Please enter valid key");
+	}
+
+	@Override
+	public List<Planter> findPlantWithPlanter(String plantName, String key) throws OrderException, CustomerException, PlanterNotFoundException {
+		
+		CustomerCurrentUserSession session = cSessionRepo.findByCustomerUuid(key);
+		
+		
+		 if(session!=null) {
+			 
+			 List<Planter> planters = pRepo.getPlanterByPlant(plantName);
+			 
+			 if(planters.size()==0) {
+				 
+				 throw new PlanterNotFoundException(plantName+"plant is not available");
+			 }else
+				 
+				 return planters;
+		 }else
+			 
+			 throw new CustomerException("Please enter valid key");
+		
+		
+	}
+
+	@Override
+	public String buyPlanterWithSeed(ItemOrder order, String key, Integer planterId) throws CustomerException, PlanterNotFoundException {
+		
+	  CustomerCurrentUserSession session = cSessionRepo.findByCustomerUuid(key);
+	  
+	  if(session!=null) {
+		  
+		  Optional<Planter> planter = pRepo.findById(planterId);
+		  
+		  Planter planter2 = planter.get();
+		  
+		  if(planter2==null) {
+			  
+			  throw new PlanterNotFoundException("Please enter valid Planter Id");
+		  }else {
+			  
+			  if(planter2.getSeed()!=null) {
+				  if(order.getQuantity() <= planter2.getPlanterStock()) {
+						
+					  order.setLocalDateTime(LocalDateTime.now());
+					  
+					  order.setTotalCost((planter2.getPlanterCost()+planter2.getSeed().getSeedsCost())*order.getQuantity());
+					  
+					  order.setSessionKey(key);
+					  
+					  order.setProductType("Planter with Seed");
+					  
+					  planter2.setPlanterStock(planter2.getPlanterStock() - order.getQuantity());
+					  
+					  iRepo.save(order);;
+					  
+					  return order.toString() + " " + planter2.toString();
+					  
+				  }else
+					  
+					  throw new PlanterNotFoundException("Planter is out of Stock");
+			  }else
+				  
+				  throw new PlanterNotFoundException("There is no seed available with planterId :"+planterId);
+		  }
+		  
+	  }else
+		  
+		  throw new CustomerException("Please enter valid key or login first");
+		
+	}
+
+	@Override
+	public String buyPlanterWithPlant(ItemOrder order, String key, Integer planterId) throws CustomerException, PlanterNotFoundException {
+		
+		  CustomerCurrentUserSession session = cSessionRepo.findByCustomerUuid(key);
+		  
+		  if(session!=null) {
+			  
+			  Optional<Planter> planter = pRepo.findById(planterId);
+			  
+			  Planter planter2 = planter.get();
+			  
+			  if(planter2==null) { 
+				  throw new PlanterNotFoundException("Please enter valid Planter Id");
+			  }else {
+				  
+				  if(planter2.getPlant()!=null) {
+					  if(order.getQuantity() <= planter2.getPlanterStock()) {
+							
+						  order.setLocalDateTime(LocalDateTime.now());
+						  
+						  order.setTotalCost((planter2.getPlanterCost()+planter2.getSeed().getSeedsCost())*order.getQuantity());
+						  
+						  order.setSessionKey(key);
+						  
+						  planter2.setPlanterStock(planter2.getPlanterStock() - order.getQuantity());
+						  
+						  pRepo.save(planter2);
+						  
+						  order.setProductType("Planter with Plant");
+						  
+						  iRepo.save(order);
+						  
+						  return order.toString() + " " + planter2.toString();
+						  
+					  }else
+						  
+						  throw new PlanterNotFoundException("Planter is out of Stock");
+				  }else
+					  
+					  throw new PlanterNotFoundException("There is no plant available with planter Id :"+planterId);
+			  }
+			  
+		  }else
+			  
+			  throw new CustomerException("Please enter valid key or login first");
+	}
+
+	
+	@Override
+	public String buyPlanterBYShapeAndId(ItemOrder order, String key, String shape, Integer planterId) throws CustomerException, PlanterNotFoundException {
+		
+		CustomerCurrentUserSession customerSession = cSessionRepo.findByCustomerUuid(key);
+		
+		if(customerSession!=null) {
+			
+			Optional<Planter> opt = pRepo.findById(planterId);
+
+			if(opt.isPresent()) {
+				
+				Planter planter = opt.get();
+				
+				if(planter.getPlanterShape().equals(shape)) {
+					
+					order.setLocalDateTime(LocalDateTime.now());
+					
+					order.setTotalCost(planter.getPlanterCost()*order.getQuantity());
+					
+					order.setSessionKey(key);
+					
+					order.setProductType("Planter");
+					
+					planter.setPlanterStock(planter.getPlanterStock() - order.getQuantity());
+					
+					pRepo.save(planter);
+					
+					iRepo.save(order);
+					
+					return order.toString() + "      =======================      " + planter.toString();
+					
+				}else
+					
+					throw new PlanterNotFoundException("Planter not found with shape :"+shape);
+				
+				
+			}else {
+				throw new PlanterNotFoundException("There is no planter available with id :"+planterId);
+			}
+			
+		}else
+			
+			throw new CustomerException("Invalid key. Please enter valid key or login first");
+		
+	}
+
+
+	@Override
+	public Plant viewPlantByName(String key, String name) throws CustomerException, PlanterNotFoundException {
+
+		CustomerCurrentUserSession session = cSessionRepo.findByCustomerUuid(key);
+		
+		if(session!=null) {
+			
+			Plant plants = pDao.findByCommonName(name);
+			
+			if(plants==null) {
+				
+				throw new PlanterNotFoundException("No plant available with name :"+name);
+				
+			}else
+				
+				return plants;
+			
+		}else
+			
+			throw new CustomerException("Please enter valid key");
+		
+		
+
+		
+	}
+
+	@Override
+	public String buyPlantWithNameAndId(ItemOrder order, String name, Integer id, String key) throws CustomerException, PlanterNotFoundException {
+		
+		CustomerCurrentUserSession session = cSessionRepo.findByCustomerUuid(key);
+		
+		if(session!=null) {
+			
+			Optional<Plant> opt = pDao.findById(id);
+			
+			if(opt.isPresent()) {
+				
+				Plant plant = opt.get();
+				
+				if(plant.getCommonName().equals(name)) {
+					
+					order.setLocalDateTime(LocalDateTime.now());
+					
+					order.setTotalCost(plant.getPlantCost()*order.getQuantity());
+					
+					plant.setPlantsStock(plant.getPlantsStock() - order.getQuantity());
+					
+					order.setSessionKey(key);
+					
+					order.setProductType("Plant");
+					
+					pDao.save(plant);
+					
+					iRepo.save(order);
+					
+					return order.toString() + "      =======================      " + plant.toString();
+					
+				}else
+					
+					throw new PlanterNotFoundException("No Plant is available with name :"+name);
+				
+			}else
+				
+				throw new PlanterNotFoundException("No Plant is available with Id :"+id);
+			
+		}else
+			
+			throw new CustomerException("Please enter valid key");
+		
+		
+	}
+
+	@Override
+	public String buySeedWithName(ItemOrder order, String name, String key) throws CustomerException, SeedException {
+
+		CustomerCurrentUserSession session = cSessionRepo.findByCustomerUuid(key);
+		
+		if(session!=null) {
+			
+			Seed seed = sRepo.findByCommanName(name);
+			
+			if(seed!=null) {
+				
+				if(order.getQuantity()<=seed.getSeedStock()) {
+					
+					order.setLocalDateTime(LocalDateTime.now());
+					
+					order.setTotalCost(seed.getSeedsCost()*order.getQuantity());
+					
+					seed.setSeedStock(seed.getSeedStock() - order.getQuantity());
+					
+					order.setSessionKey(key);
+					
+					order.setProductType("Seed");
+					
+					sRepo.save(seed);
+					
+					iRepo.save(order);
+					
+					return order.toString() + "       ==============      " + seed.toString();
+					
+				}else
+					
+					throw new SeedException("Seed is out of Stock");
+				
+			}else
+				
+				throw new SeedException("There is no seed available with name :"+name);
+			
+		}else
+			
+			throw new CustomerException("Please enter valid key");
+	}
+
+	@Override
+	public Cart viewCart(String key) throws OrderException {
+		
+		List<ItemOrder> lists = iRepo.findBySessionKey(key);
+		
+		if(lists.isEmpty()) {
+			
+			throw new OrderException("No item found in your cart");
+			
+		}else {
+			
+			Cart cart = new Cart();
+			
+			cart.setList(lists);
+			
+			return cart;
+		}
+			
+			
+	}
+
+	@Override
+	public String deleteItemFromCart(Integer bookingId, String key) throws OrderException, CustomerException {
+		
+		CustomerCurrentUserSession session = cSessionRepo.findByCustomerUuid(key);
+		
+		if(session!=null) {
+			
+			Optional<ItemOrder> opt = iRepo.findById(bookingId);
+			
+			if(opt.isPresent()) {
+				
+				ItemOrder order = opt.get();
+				iRepo.delete(order);
+				
+				return order.toString();
+				
+			}else
+				
+				throw new OrderException("Invalid Booking Id");
+			
+		}else
+			
+			throw new CustomerException("Invalid Key");
+	}
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+
+}
